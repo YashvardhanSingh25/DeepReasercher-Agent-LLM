@@ -8,29 +8,55 @@ client = OpenAI(
 
 class PlannerAgent:
 
-    def generate_subquestions(self, question):
-
-        SYSTEM_PROMPT = f""" Break the question into 5 researchable sub questions.
-
-Question:
-{question}
-
-Return only the numbered list.
-"""
-
+    # 🔥 LLM HELPER (used for rewriting also)
+    def llm(self, prompt):
         response = client.chat.completions.create(
             model="qwen2.5-vl-3b-instruct",
-            messages=[{"role":"user","content":SYSTEM_PROMPT}],
-            temperature=1.0 ,
-            max_tokens= 100,
-            
+            messages=[{"role": "user", "content": prompt}],
+            temperature=0.3,
+            max_tokens=200
         )
+        return response.choices[0].message.content.strip()
+
+    # 🔥 GENERATE SUBQUESTIONS (NOW CLEAN QUERY BASED)
+    def generate_subquestions(self, question, context=""):
+
+        SYSTEM_PROMPT = f"""
+You are a research planner.
+
+Conversation Context:
+{context}
+
+User Question:
+{question}
+
+IMPORTANT:
+- If the question is related to previous conversation, use context to understand it.
+- If not related, ignore context.
+
+Break into 5 researchable sub-questions.
+
+Return ONLY numbered list.
+"""
+
+        try:
+            response = client.chat.completions.create(
+                model="qwen2.5-vl-3b-instruct",
+                messages=[{"role":"user","content":SYSTEM_PROMPT}],
+                temperature=0.7,
+                top_p=0.9,
+                max_tokens=300
+            )
+        except Exception as e:
+            if "connection" in str(e).lower() or "refused" in str(e).lower():
+                raise Exception("LM_STUDIO_ERROR")
+            raise e
 
         text = response.choices[0].message.content
 
         sub_questions = [
-        q.split(".",1)[-1].strip()
-        for q in text.split("\n") if q.strip()
+            q.split(".",1)[-1].strip()
+            for q in text.split("\n") if q.strip()
         ]
 
         return sub_questions
@@ -47,22 +73,9 @@ Return only the numbered list.
             data["sub_questions"].append({
                 "question": q,
                 "answer": "",
-                'url': ""
+                "url": "",
+                "title": ""
             })
 
         with open("research_data.json","w") as f:
             json.dump(data,f,indent=4)
-
-
-
-if __name__ == "__main__":
-
-    planner = PlannerAgent()
-
-    # question = input("Enter research question:")
-
-    sub_q = planner.generate_subquestions(question)
-    # print(sub_q)
-    planner.save_to_json(question, sub_q)
-
-    # print("Sub questions saved to JSON")
