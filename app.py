@@ -12,6 +12,19 @@ planner = PlannerAgent()
 researcher = ResearcherAgent()
 writer = WriterAgent()
 
+
+def get_unique_chat_name(base_name):
+    name = base_name.strip() or "New Chat"
+    if name not in st.session_state.sessions:
+        return name
+
+    suffix = 2
+    while f"{name} ({suffix})" in st.session_state.sessions:
+        suffix += 1
+
+    return f"{name} ({suffix})"
+
+
 # ---------------- SESSION ----------------
 if "messages" not in st.session_state:
     st.session_state.messages = []
@@ -22,6 +35,11 @@ if "sessions" not in st.session_state:
 if "current_chat" not in st.session_state:
     st.session_state.current_chat = "New Chat"
 
+if st.session_state.current_chat not in st.session_state.sessions:
+    st.session_state.sessions[st.session_state.current_chat] = []
+
+st.session_state.messages = st.session_state.sessions[st.session_state.current_chat].copy()
+
 # ---------------- SIDEBAR ----------------
 with st.sidebar:
     st.markdown("### Welcome 👋")
@@ -31,16 +49,24 @@ with st.sidebar:
 
     # Show chats
     for chat in list(st.session_state.sessions.keys()):
-        if st.button(chat):
+        if st.button(chat, key=f"chat_{chat}"):
             st.session_state.current_chat = chat
             st.session_state.messages = st.session_state.sessions[chat].copy()
+            st.rerun()
 
     # New Chat button
     if st.button("+ New Chat"):
-        new_chat = f"Chat {len(st.session_state.sessions)+1}"
+        new_chat = get_unique_chat_name(f"Chat {len(st.session_state.sessions)+1}")
         st.session_state.sessions[new_chat] = []
         st.session_state.current_chat = new_chat
         st.session_state.messages = []
+        st.rerun()
+
+    if st.button("Reload Chat", key="reload_chat"):
+        st.session_state.messages = st.session_state.sessions.get(
+            st.session_state.current_chat, []
+        ).copy()
+        st.rerun()
 
 # ---------------- FIXED TOP BAR ----------------
 st.markdown("""
@@ -114,7 +140,7 @@ if query:
 
     # Rename chat using FIRST question
     if len(st.session_state.messages) == 1:
-        new_name = " ".join(query.strip().split()[:5])
+        new_name = get_unique_chat_name(" ".join(query.strip().split()[:5]))
 
         st.session_state.sessions[new_name] = st.session_state.sessions.pop(
             st.session_state.current_chat
